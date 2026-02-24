@@ -45,7 +45,6 @@ class JustType {
 
   init() {
     if (this.isTextarea) {
-      this.element.readOnly = true;
       this.element.classList.add('just-type-input', 'just-type-textarea');
     } else {
       this.element.type = 'text';
