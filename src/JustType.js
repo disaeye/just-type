@@ -27,7 +27,7 @@ class JustType {
     }
 
     this.options = { ...DEFAULT_OPTIONS, ...options };
-    this.charTimes = [];
+    this.charData = [];
     this.timer = null;
     this.lastValue = '';
     this.cursorTimeout = null;
@@ -37,60 +37,142 @@ class JustType {
   }
 
   init() {
+    this.setupOverlay();
+    
     this.element.classList.add('just-type-input');
+    this.element.parentElement.classList.add('just-type-wrapper');
     
     this.element.addEventListener('input', this.handleInput.bind(this));
-    this.element.addEventListener('keydown', this.handleKeyDown.bind(this));
-    this.element.addEventListener('click', () => setTimeout(() => this.updateMask(), 0));
-    this.element.addEventListener('keyup', () => setTimeout(() => this.updateMask(), 0));
+    this.element.addEventListener('click', this.handleSelection.bind(this));
+    this.element.addEventListener('keyup', this.handleSelection.bind(this));
     this.element.addEventListener('copy', this.handleCopy.bind(this));
     this.element.addEventListener('cut', this.handleCut.bind(this));
     this.element.addEventListener('paste', this.handlePaste.bind(this));
     this.element.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     
-    this.charTimes = [];
-    for (let i = 0; i < this.element.value.length; i++) {
-      this.charTimes.push(0);
-    }
-    this.lastValue = this.element.value;
+    document.addEventListener('selectionchange', this.handleSelection.bind(this));
     
+    this.syncChars();
     this.startTimer();
-    this.updateMask();
+    this.render();
+  }
+
+  setupOverlay() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'just-type-overlay-wrapper';
+    
+    const styles = window.getComputedStyle(this.element);
+    const overlay = document.createElement('div');
+    overlay.className = 'just-type-overlay';
+    
+    overlay.style.fontFamily = styles.fontFamily;
+    overlay.style.fontSize = styles.fontSize;
+    overlay.style.lineHeight = styles.lineHeight;
+    overlay.style.letterSpacing = styles.letterSpacing;
+    overlay.style.padding = styles.padding;
+    overlay.style.whiteSpace = styles.whiteSpace;
+    overlay.style.wordBreak = styles.wordBreak;
+    overlay.style.wordWrap = styles.wordWrap;
+    
+    this.element.parentNode.insertBefore(wrapper, this.element);
+    wrapper.appendChild(this.element);
+    wrapper.appendChild(overlay);
+    
+    this.overlay = overlay;
+    this.wrapper = wrapper;
+    
+    this.element.classList.add('just-type-hidden-input');
+  }
+
+  syncChars() {
+    const newText = this.element.value;
+    if (newText === this.lastValue) return;
+
+    const oldText = this.lastValue;
+    
+    let pre = 0;
+    while (pre < oldText.length && pre < newText.length && oldText[pre] === newText[pre]) pre++;
+
+    let oldEnd = oldText.length - 1;
+    let newEnd = newText.length - 1;
+    while (oldEnd >= pre && newEnd >= pre && oldText[oldEnd] === newText[newEnd]) {
+      oldEnd--; newEnd--;
+    }
+
+    const delCount = oldEnd - pre + 1;
+    if (delCount > 0) {
+      for (let i = pre; i < pre + delCount; i++) {
+        if (this.charData[i] && this.charData[i].timerId) {
+          clearTimeout(this.charData[i].timerId);
+        }
+      }
+      this.charData.splice(pre, delCount);
+    }
+
+    const insCount = newEnd - pre + 1;
+    if (insCount > 0) {
+      const toInsert = [];
+      for (let i = pre; i <= newEnd; i++) {
+        toInsert.push({ ch: newText[i], masked: false, timerId: null });
+      }
+      this.charData.splice(pre, 0, ...toInsert);
+      
+      for (let i = pre; i < pre + insCount; i++) {
+        this.scheduleChar(i);
+      }
+    }
+
+    this.lastValue = newText;
+  }
+
+  scheduleChar(idx) {
+    const c = this.charData[idx];
+    if (!c) return;
+    if (c.timerId) clearTimeout(c.timerId);
+    if (this.options.duration <= 0) return;
+    
+    c.timerId = setTimeout(() => {
+      c.masked = true;
+      c.timerId = null;
+      this.render();
+      if (this.charData.every(char => char.masked) && this.options.onExpire) {
+        this.options.onExpire();
+      }
+    }, this.options.duration);
   }
 
   handleInput(e) {
-    const newValue = e.target.value;
-    const oldValue = this.lastValue;
-    
-    if (newValue.length > oldValue.length) {
-      const addedChars = newValue.length - oldValue.length;
-      const now = Date.now();
-      const insertPos = oldValue.length;
-      for (let i = 0; i < addedChars; i++) {
-        this.charTimes.splice(insertPos + i, 0, now);
-      }
-    } else if (newValue.length < oldValue.length) {
-      this.charTimes = this.charTimes.slice(0, newValue.length);
-    }
-    
-    this.lastValue = newValue;
+    this.syncChars();
     
     if (this.options.onInput) {
       this.options.onInput(this.getValue());
     }
     
     this.startTimer();
-    this.updateMask();
+    this.render();
   }
 
-  handleKeyDown(e) {
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      const start = this.element.selectionStart;
-      const end = this.element.selectionEnd;
-      if (end > start) {
-        this.charTimes.splice(start, end - start);
+  handleSelection() {
+    const start = this.element.selectionStart;
+    const end = this.element.selectionEnd;
+    
+    const spans = this.overlay.querySelectorAll('.jt-char');
+    spans.forEach((span, i) => {
+      const c = this.charData[i];
+      if (!c) return;
+      
+      const isMasked = c.masked;
+      const isSelected = i >= start && i < end;
+      
+      if (isMasked && isSelected) {
+        span.className = 'jt-char jt-selected-reveal';
+      } else if (isMasked) {
+        span.className = `jt-char jt-masked jt-mode-${this.options.maskType}`;
+        span.dataset.glyph = this.getGlyph(c.ch);
+      } else {
+        span.className = 'jt-char';
       }
-    }
+    });
   }
 
   handleCopy(e) {
@@ -115,22 +197,8 @@ class JustType {
     const start = this.element.selectionStart;
     const end = this.element.selectionEnd;
     
-    const newValue = this.lastValue.substring(0, start) + text + this.lastValue.substring(end);
-    this.element.value = newValue;
-    
-    const now = Date.now();
-    for (let i = 0; i < text.length; i++) {
-      this.charTimes.splice(start + i, 0, now);
-    }
-    
-    this.lastValue = newValue;
-    
-    if (this.options.onInput) {
-      this.options.onInput(this.getValue());
-    }
-    
-    this.startTimer();
-    this.updateMask();
+    this.element.setRangeText(text, start, end, 'end');
+    this.element.dispatchEvent(new Event('input'));
   }
 
   handleContextMenu(e) {
@@ -150,114 +218,105 @@ class JustType {
     return this.element.value;
   }
 
+  getGlyph(ch) {
+    const isSpace = ch === ' ';
+    if (this.options.maskType === 'block') return isSpace ? '□' : '■';
+    if (this.options.maskType === 'dot') return isSpace ? '○' : '●';
+    if (this.options.maskType === 'square') return '□';
+    if (this.options.maskType === 'triangle') return '▲';
+    return '';
+  }
+
+  getModeClass() {
+    return ` jt-mode-${this.options.maskType}`;
+  }
+
   startTimer() {
     this.clearTimer();
-    if (this.options.duration > 0) {
-      this.timer = setTimeout(() => {
-        this.charTimes = this.charTimes.map(() => 0);
-        this.updateMask();
-        if (this.options.onExpire) {
-          this.options.onExpire();
-        }
-      }, this.options.duration);
-    }
+    if (this.options.duration <= 0) return;
+    
+    this.charData.forEach((c, i) => {
+      if (!c.masked && !c.timerId) {
+        this.scheduleChar(i);
+      }
+    });
   }
 
   clearTimer() {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
+    this.charData.forEach(c => {
+      if (c.timerId) {
+        clearTimeout(c.timerId);
+        c.timerId = null;
+      }
+    });
   }
 
-  updateMask() {
-    const value = this.getValue();
-    const selectionStart = this.element.selectionStart;
-    const selectionEnd = this.element.selectionEnd;
-    const now = Date.now();
-    const duration = this.options.duration;
-    const maskChar = MASK_TYPES[this.options.maskType] || MASK_TYPES.dot;
-    
-    let maskedValue = '';
-    let realCaretPos = selectionStart;
-    
-    for (let i = 0; i < value.length; i++) {
-      const charTime = this.charTimes[i] || 0;
-      const isSelected = i >= selectionStart && i < selectionEnd;
-      const isFresh = duration > 0 && (now - charTime < duration);
-      
-      if (isSelected || isFresh || charTime === 0) {
-        maskedValue += value[i];
-      } else if (this.options.maskType === 'hidden') {
-        maskedValue += '\u200b';
+  render() {
+    let html = '';
+    for (let i = 0; i < this.charData.length; i++) {
+      const c = this.charData[i];
+      if (c.ch === '\n') {
+        html += '\n';
+        continue;
+      }
+
+      const escaped = c.ch
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      if (c.masked) {
+        const glyph = this.getGlyph(c.ch);
+        html += `<span class="jt-char jt-masked${this.getModeClass()}" data-i="${i}" data-glyph="${glyph}">${escaped}</span>`;
       } else {
-        maskedValue += maskChar;
+        html += `<span class="jt-char" data-i="${i}">${escaped}</span>`;
       }
     }
     
-    if (this.element.value !== maskedValue) {
-      const caretPos = this.getCaretPosition(maskedValue, selectionStart, value);
-      this.element.value = maskedValue;
-      this.setCaretPosition(caretPos);
-    }
-  }
-
-  getCaretPosition(maskedValue, originalCaret, originalValue) {
-    let maskedCaret = 0;
-    let realPos = 0;
-    const now = Date.now();
-    const duration = this.options.duration;
-    
-    while (realPos < originalCaret && realPos < originalValue.length) {
-      const charTime = this.charTimes[realPos] || 0;
-      const isFresh = duration > 0 && (now - charTime < duration);
-      
-      if (charTime === 0 || isFresh) {
-        maskedCaret++;
-      }
-      realPos++;
-    }
-    
-    return maskedCaret;
-  }
-
-  setCaretPosition(pos) {
-    try {
-      this.element.setSelectionRange(pos, pos);
-    } catch (e) {}
+    this.overlay.innerHTML = html;
+    this.handleSelection();
   }
 
   setValue(value) {
     this.element.value = value;
-    this.charTimes = [];
-    const now = Date.now();
+    this.charData = [];
     for (let i = 0; i < value.length; i++) {
-      this.charTimes.push(now);
+      this.charData.push({ ch: value[i], masked: false, timerId: null });
     }
     this.lastValue = value;
     this.startTimer();
-    this.updateMask();
+    this.render();
   }
 
   reset() {
-    this.charTimes = this.charTimes.map(() => 0);
+    this.charData.forEach(c => {
+      if (c.timerId) {
+        clearTimeout(c.timerId);
+        c.timerId = null;
+      }
+      c.masked = false;
+    });
     this.startTimer();
-    this.updateMask();
+    this.render();
   }
 
   destroy() {
     this.clearTimer();
     this.element.removeEventListener('input', this.handleInput);
-    this.element.removeEventListener('keydown', this.handleKeyDown);
     this.element.removeEventListener('click', this.handleSelection);
     this.element.removeEventListener('keyup', this.handleSelection);
     this.element.removeEventListener('copy', this.handleCopy);
     this.element.removeEventListener('cut', this.handleCut);
     this.element.removeEventListener('paste', this.handlePaste);
     this.element.removeEventListener('contextmenu', this.handleContextMenu);
+    document.removeEventListener('selectionchange', this.handleSelection);
     
-    this.element.classList.remove('just-type-input');
-    this.element.value = this.getValue();
+    if (this.wrapper && this.element.parentNode === this.wrapper) {
+      this.wrapper.parentNode.insertBefore(this.element, this.wrapper);
+      this.wrapper.parentNode.removeChild(this.wrapper);
+    }
+    
+    this.element.classList.remove('just-type-input', 'just-type-hidden-input');
   }
 }
 

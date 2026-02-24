@@ -3,7 +3,92 @@
   letter-spacing: 0.1em;
 }
 
-.just-type-input::selection {
-  background-color: #007bff;
-  color: white;
+.just-type-wrapper {
+  position: relative;
+}
+
+.just-type-hidden-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: #c9a96e;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.just-type-overlay-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.just-type-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  color: #e8e0d4;
+  overflow: hidden;
+}
+
+.jt-char {
+  display: inline;
+  white-space: pre-wrap;
+  position: relative;
+}
+
+.jt-char.masked {
+  color: transparent;
+  text-decoration-color: transparent;
+}
+
+.jt-char.masked::before {
+  content: attr(data-glyph);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3a3530;
+  font-size: 0.78em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.jt-char.masked.jt-mode-dot::before {
+  color: #4a4540;
+  font-size: 0.58em;
+}
+
+.jt-char.masked.jt-mode-square::before {
+  color: #3a3530;
+}
+
+.jt-char.masked.jt-mode-hidden::before {
+  content: none;
+}
+
+.jt-char.masked.jt-mode-triangle::before {
+  color: #4a4540;
+  font-size: 0.65em;
+}
+
+.jt-char.jt-selected-reveal {
+  color: #e8e0d4 !important;
+  background: rgba(201, 169, 110, 0.14);
+  border-radius: 2px;
+}
+
+.jt-char.jt-selected-reveal::before {
+  content: none !important;
 }
