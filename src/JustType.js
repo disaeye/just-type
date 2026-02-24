@@ -29,94 +29,58 @@ class JustType {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.charTimes = [];
     this.timer = null;
+    this.lastValue = '';
+    this.cursorTimeout = null;
     this.isTextarea = this.element.tagName.toLowerCase() === 'textarea';
     
     this.init();
   }
 
   init() {
-    if (this.isTextarea) {
-      this.setupTextareaMode();
-    } else {
-      this.setupInputMode();
-    }
+    this.element.classList.add('just-type-input');
     
     this.element.addEventListener('input', this.handleInput.bind(this));
     this.element.addEventListener('keydown', this.handleKeyDown.bind(this));
-    this.element.addEventListener('click', this.handleSelection.bind(this));
-    this.element.addEventListener('keyup', this.handleSelection.bind(this));
+    this.element.addEventListener('click', () => setTimeout(() => this.updateMask(), 0));
+    this.element.addEventListener('keyup', () => setTimeout(() => this.updateMask(), 0));
     this.element.addEventListener('copy', this.handleCopy.bind(this));
     this.element.addEventListener('cut', this.handleCut.bind(this));
     this.element.addEventListener('paste', this.handlePaste.bind(this));
     this.element.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     
+    this.charTimes = [];
+    for (let i = 0; i < this.element.value.length; i++) {
+      this.charTimes.push(0);
+    }
+    this.lastValue = this.element.value;
+    
     this.startTimer();
-  }
-
-  setupTextareaMode() {
-    this.element.classList.add('just-type-input');
-    this.element.classList.add('just-type-textarea');
-    this.element.style.position = 'relative';
-    this.element.style.zIndex = '2';
-    this.element.style.background = 'transparent';
-    this.element.style.color = 'transparent';
-    this.element.style.caretColor = 'black';
-    
-    this.overlay = document.createElement('div');
-    this.overlay.className = 'just-type-overlay';
-    this.overlay.style.position = 'absolute';
-    this.overlay.style.top = '0';
-    this.overlay.style.left = '0';
-    this.overlay.style.right = '0';
-    this.overlay.style.bottom = '0';
-    this.overlay.style.padding = this.element.style.padding || '16px';
-    this.overlay.style.fontFamily = this.element.style.fontFamily || 'inherit';
-    this.overlay.style.fontSize = this.element.style.fontSize || 'inherit';
-    this.overlay.style.lineHeight = this.element.style.lineHeight || '1.8';
-    this.overlay.style.whiteSpace = 'pre-wrap';
-    this.overlay.style.wordBreak = 'break-word';
-    this.overlay.style.overflow = 'hidden';
-    this.overlay.style.pointerEvents = 'none';
-    this.overlay.style.zIndex = '1';
-    this.overlay.style.color = '#2d2d2d';
-    this.overlay.style.background = this.element.style.background || '#ffffff';
-    
-    this.wrapper = document.createElement('div');
-    this.wrapper.style.position = 'relative';
-    this.wrapper.style.width = '100%';
-    this.wrapper.style.height = '100%';
-    
-    this.element.parentNode.insertBefore(this.wrapper, this.element);
-    this.wrapper.appendChild(this.element);
-    this.wrapper.appendChild(this.overlay);
-  }
-
-  setupInputMode() {
-    this.element.type = 'text';
-    this.element.autocomplete = 'off';
-    this.element.classList.add('just-type-input');
+    this.updateMask();
   }
 
   handleInput(e) {
     const newValue = e.target.value;
-    const oldValue = this.getValue();
+    const oldValue = this.lastValue;
     
     if (newValue.length > oldValue.length) {
       const addedChars = newValue.length - oldValue.length;
       const now = Date.now();
+      const insertPos = oldValue.length;
       for (let i = 0; i < addedChars; i++) {
-        this.charTimes.push(now);
+        this.charTimes.splice(insertPos + i, 0, now);
       }
     } else if (newValue.length < oldValue.length) {
       this.charTimes = this.charTimes.slice(0, newValue.length);
     }
+    
+    this.lastValue = newValue;
     
     if (this.options.onInput) {
       this.options.onInput(this.getValue());
     }
     
     this.startTimer();
-    this.renderDisplay();
+    this.updateMask();
   }
 
   handleKeyDown(e) {
@@ -127,10 +91,6 @@ class JustType {
         this.charTimes.splice(start, end - start);
       }
     }
-  }
-
-  handleSelection() {
-    this.renderDisplay();
   }
 
   handleCopy(e) {
@@ -155,8 +115,7 @@ class JustType {
     const start = this.element.selectionStart;
     const end = this.element.selectionEnd;
     
-    const value = this.getValue();
-    const newValue = value.substring(0, start) + text + value.substring(end);
+    const newValue = this.lastValue.substring(0, start) + text + this.lastValue.substring(end);
     this.element.value = newValue;
     
     const now = Date.now();
@@ -164,12 +123,14 @@ class JustType {
       this.charTimes.splice(start + i, 0, now);
     }
     
+    this.lastValue = newValue;
+    
     if (this.options.onInput) {
       this.options.onInput(this.getValue());
     }
     
     this.startTimer();
-    this.renderDisplay();
+    this.updateMask();
   }
 
   handleContextMenu(e) {
@@ -194,7 +155,7 @@ class JustType {
     if (this.options.duration > 0) {
       this.timer = setTimeout(() => {
         this.charTimes = this.charTimes.map(() => 0);
-        this.renderDisplay();
+        this.updateMask();
         if (this.options.onExpire) {
           this.options.onExpire();
         }
@@ -209,7 +170,7 @@ class JustType {
     }
   }
 
-  renderDisplay() {
+  updateMask() {
     const value = this.getValue();
     const selectionStart = this.element.selectionStart;
     const selectionEnd = this.element.selectionEnd;
@@ -217,48 +178,53 @@ class JustType {
     const duration = this.options.duration;
     const maskChar = MASK_TYPES[this.options.maskType] || MASK_TYPES.dot;
     
-    if (this.isTextarea) {
-      let displayHtml = '';
-      for (let i = 0; i < value.length; i++) {
-        const char = value[i];
-        const charTime = this.charTimes[i] || 0;
-        const isSelected = i >= selectionStart && i < selectionEnd;
-        const isFresh = duration > 0 && (now - charTime < duration);
-        
-        if (isSelected || isFresh || charTime === 0) {
-          displayHtml += this.escapeHtml(char);
-        } else if (this.options.maskType === 'hidden') {
-          displayHtml += '<span style="opacity:0">■</span>';
-        } else {
-          displayHtml += maskChar;
-        }
-      }
+    let maskedValue = '';
+    let realCaretPos = selectionStart;
+    
+    for (let i = 0; i < value.length; i++) {
+      const charTime = this.charTimes[i] || 0;
+      const isSelected = i >= selectionStart && i < selectionEnd;
+      const isFresh = duration > 0 && (now - charTime < duration);
       
-      this.overlay.innerHTML = displayHtml + '<br>';
-    } else {
-      let result = '';
-      for (let i = 0; i < value.length; i++) {
-        const char = value[i];
-        const charTime = this.charTimes[i] || 0;
-        const isSelected = i >= selectionStart && i < selectionEnd;
-        const isFresh = duration > 0 && (now - charTime < duration);
-        
-        if (isSelected || isFresh || charTime === 0) {
-          result += char;
-        } else if (this.options.maskType === 'hidden') {
-          result += '';
-        } else {
-          result += maskChar;
-        }
+      if (isSelected || isFresh || charTime === 0) {
+        maskedValue += value[i];
+      } else if (this.options.maskType === 'hidden') {
+        maskedValue += '\u200b';
+      } else {
+        maskedValue += maskChar;
       }
-      this.element.value = result;
+    }
+    
+    if (this.element.value !== maskedValue) {
+      const caretPos = this.getCaretPosition(maskedValue, selectionStart, value);
+      this.element.value = maskedValue;
+      this.setCaretPosition(caretPos);
     }
   }
 
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  getCaretPosition(maskedValue, originalCaret, originalValue) {
+    let maskedCaret = 0;
+    let realPos = 0;
+    const now = Date.now();
+    const duration = this.options.duration;
+    
+    while (realPos < originalCaret && realPos < originalValue.length) {
+      const charTime = this.charTimes[realPos] || 0;
+      const isFresh = duration > 0 && (now - charTime < duration);
+      
+      if (charTime === 0 || isFresh) {
+        maskedCaret++;
+      }
+      realPos++;
+    }
+    
+    return maskedCaret;
+  }
+
+  setCaretPosition(pos) {
+    try {
+      this.element.setSelectionRange(pos, pos);
+    } catch (e) {}
   }
 
   setValue(value) {
@@ -268,14 +234,15 @@ class JustType {
     for (let i = 0; i < value.length; i++) {
       this.charTimes.push(now);
     }
+    this.lastValue = value;
     this.startTimer();
-    this.renderDisplay();
+    this.updateMask();
   }
 
   reset() {
     this.charTimes = this.charTimes.map(() => 0);
     this.startTimer();
-    this.renderDisplay();
+    this.updateMask();
   }
 
   destroy() {
@@ -289,20 +256,7 @@ class JustType {
     this.element.removeEventListener('paste', this.handlePaste);
     this.element.removeEventListener('contextmenu', this.handleContextMenu);
     
-    if (this.isTextarea && this.wrapper) {
-      this.element.style.position = '';
-      this.element.style.zIndex = '';
-      this.element.style.background = '';
-      this.element.style.color = '';
-      this.element.style.caretColor = '';
-      this.wrapper.parentNode.insertBefore(this.element, this.wrapper);
-      this.wrapper.remove();
-      this.element.classList.remove('just-type-input', 'just-type-textarea');
-    } else {
-      this.element.type = 'text';
-      this.element.classList.remove('just-type-input');
-    }
-    
+    this.element.classList.remove('just-type-input');
     this.element.value = this.getValue();
   }
 }
