@@ -87,7 +87,6 @@
       background: var(--editor-bg);
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-      overflow: hidden;
     }
 
     .editor {
@@ -100,16 +99,34 @@
       outline: none;
       resize: none;
       font-family: 'Georgia', 'Times New Roman', serif;
-      color: var(--text-color);
-      background: transparent;
+      color: transparent;
+      background: var(--editor-bg);
+      caret-color: #2d2d2d;
+      position: relative;
+      z-index: 2;
     }
 
     .editor::placeholder {
       color: #ccc;
     }
 
-    .editor.masked {
-      -webkit-text-security: disc;
+    .editor-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 32px;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 18px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 1;
+      color: #2d2d2d;
+      background: var(--editor-bg);
     }
 
     .status-bar {

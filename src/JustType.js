@@ -27,76 +27,125 @@ class JustType {
     }
 
     this.options = { ...DEFAULT_OPTIONS, ...options };
-    this.value = '';
+    this.charTimes = [];
     this.timer = null;
-    this.isMasked = false;
     this.isTextarea = this.element.tagName.toLowerCase() === 'textarea';
-    
-    if (!this.isTextarea) {
-      this.originalType = this.element.type;
-      this.originalReadOnly = this.element.readOnly;
-      this.originalAutocomplete = this.element.autocomplete;
-    } else {
-      this.originalReadOnly = this.element.readOnly;
-    }
     
     this.init();
   }
 
   init() {
     if (this.isTextarea) {
-      this.element.classList.add('just-type-input', 'just-type-textarea');
+      this.setupTextareaMode();
     } else {
-      this.element.type = 'text';
-      this.element.autocomplete = 'off';
-      this.element.readOnly = true;
-      this.element.classList.add('just-type-input');
+      this.setupInputMode();
     }
     
     this.element.addEventListener('input', this.handleInput.bind(this));
+    this.element.addEventListener('keydown', this.handleKeyDown.bind(this));
+    this.element.addEventListener('click', this.handleSelection.bind(this));
+    this.element.addEventListener('keyup', this.handleSelection.bind(this));
     this.element.addEventListener('copy', this.handleCopy.bind(this));
     this.element.addEventListener('cut', this.handleCut.bind(this));
     this.element.addEventListener('paste', this.handlePaste.bind(this));
     this.element.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     
-    this.updateDisplay();
+    this.startTimer();
+  }
+
+  setupTextareaMode() {
+    this.element.classList.add('just-type-input');
+    this.element.classList.add('just-type-textarea');
+    this.element.style.position = 'relative';
+    this.element.style.zIndex = '2';
+    this.element.style.background = 'transparent';
+    this.element.style.color = 'transparent';
+    this.element.style.caretColor = 'black';
+    
+    this.overlay = document.createElement('div');
+    this.overlay.className = 'just-type-overlay';
+    this.overlay.style.position = 'absolute';
+    this.overlay.style.top = '0';
+    this.overlay.style.left = '0';
+    this.overlay.style.right = '0';
+    this.overlay.style.bottom = '0';
+    this.overlay.style.padding = this.element.style.padding || '16px';
+    this.overlay.style.fontFamily = this.element.style.fontFamily || 'inherit';
+    this.overlay.style.fontSize = this.element.style.fontSize || 'inherit';
+    this.overlay.style.lineHeight = this.element.style.lineHeight || '1.8';
+    this.overlay.style.whiteSpace = 'pre-wrap';
+    this.overlay.style.wordBreak = 'break-word';
+    this.overlay.style.overflow = 'hidden';
+    this.overlay.style.pointerEvents = 'none';
+    this.overlay.style.zIndex = '1';
+    this.overlay.style.color = '#2d2d2d';
+    this.overlay.style.background = this.element.style.background || '#ffffff';
+    
+    this.wrapper = document.createElement('div');
+    this.wrapper.style.position = 'relative';
+    this.wrapper.style.width = '100%';
+    this.wrapper.style.height = '100%';
+    
+    this.element.parentNode.insertBefore(this.wrapper, this.element);
+    this.wrapper.appendChild(this.element);
+    this.wrapper.appendChild(this.overlay);
+  }
+
+  setupInputMode() {
+    this.element.type = 'text';
+    this.element.autocomplete = 'off';
+    this.element.classList.add('just-type-input');
   }
 
   handleInput(e) {
-    this.value = e.target.value;
+    const newValue = e.target.value;
+    const oldValue = this.getValue();
+    
+    if (newValue.length > oldValue.length) {
+      const addedChars = newValue.length - oldValue.length;
+      const now = Date.now();
+      for (let i = 0; i < addedChars; i++) {
+        this.charTimes.push(now);
+      }
+    } else if (newValue.length < oldValue.length) {
+      this.charTimes = this.charTimes.slice(0, newValue.length);
+    }
     
     if (this.options.onInput) {
-      this.options.onInput(this.value);
+      this.options.onInput(this.getValue());
     }
+    
+    this.startTimer();
+    this.renderDisplay();
+  }
 
-    if (this.options.autoReset) {
-      this.resetTimer();
+  handleKeyDown(e) {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const start = this.element.selectionStart;
+      const end = this.element.selectionEnd;
+      if (end > start) {
+        this.charTimes.splice(start, end - start);
+      }
     }
   }
 
+  handleSelection() {
+    this.renderDisplay();
+  }
+
   handleCopy(e) {
-    e.preventDefault();
-    const selection = window.getSelection();
-    const selectedText = selection.toString();
-    
+    const selectedText = this.getSelectedText();
     if (selectedText) {
-      const realValue = this.isMasked ? this.getValue() : this.value;
-      e.clipboardData.setData('text/plain', realValue);
+      e.preventDefault();
+      e.clipboardData.setData('text/plain', this.getValue());
     }
   }
 
   handleCut(e) {
-    e.preventDefault();
-    const selection = window.getSelection();
-    const selectedText = selection.toString();
-    
+    const selectedText = this.getSelectedText();
     if (selectedText) {
-      const realValue = this.isMasked ? this.getValue() : this.value;
-      e.clipboardData.setData('text/plain', realValue);
-      const start = this.element.selectionStart;
-      const end = this.element.selectionEnd;
-      this.value = this.value.substring(0, start) + this.value.substring(end);
-      this.updateDisplay();
+      e.preventDefault();
+      e.clipboardData.setData('text/plain', this.getValue());
     }
   }
 
@@ -105,44 +154,52 @@ class JustType {
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
     const start = this.element.selectionStart;
     const end = this.element.selectionEnd;
-    const selectedText = this.value.substring(start, end);
     
-    this.value = this.value.substring(0, start) + text + this.value.substring(end);
-    this.updateDisplay();
+    const value = this.getValue();
+    const newValue = value.substring(0, start) + text + value.substring(end);
+    this.element.value = newValue;
+    
+    const now = Date.now();
+    for (let i = 0; i < text.length; i++) {
+      this.charTimes.splice(start + i, 0, now);
+    }
     
     if (this.options.onInput) {
-      this.options.onInput(this.value);
+      this.options.onInput(this.getValue());
     }
     
-    if (this.options.autoReset) {
-      this.resetTimer();
-    }
+    this.startTimer();
+    this.renderDisplay();
   }
 
   handleContextMenu(e) {
-    const selection = window.getSelection();
-    const selectedText = selection.toString();
-    
+    const selectedText = this.getSelectedText();
     if (!selectedText) {
       e.preventDefault();
     }
+  }
+
+  getSelectedText() {
+    const start = this.element.selectionStart;
+    const end = this.element.selectionEnd;
+    return start !== end;
+  }
+
+  getValue() {
+    return this.element.value;
   }
 
   startTimer() {
     this.clearTimer();
     if (this.options.duration > 0) {
       this.timer = setTimeout(() => {
-        this.mask();
+        this.charTimes = this.charTimes.map(() => 0);
+        this.renderDisplay();
         if (this.options.onExpire) {
           this.options.onExpire();
         }
       }, this.options.duration);
     }
-  }
-
-  resetTimer() {
-    this.unmask();
-    this.startTimer();
   }
 
   clearTimer() {
@@ -152,72 +209,101 @@ class JustType {
     }
   }
 
-  mask() {
-    this.isMasked = true;
-    this.updateDisplay();
-  }
-
-  unmask() {
-    this.isMasked = false;
-    this.updateDisplay();
-  }
-
-  updateDisplay() {
+  renderDisplay() {
+    const value = this.getValue();
+    const selectionStart = this.element.selectionStart;
+    const selectionEnd = this.element.selectionEnd;
+    const now = Date.now();
+    const duration = this.options.duration;
+    const maskChar = MASK_TYPES[this.options.maskType] || MASK_TYPES.dot;
+    
     if (this.isTextarea) {
-      if (this.isMasked && this.options.maskType !== 'hidden') {
-        this.element.style.webkitTextSecurity = 'disc';
-      } else {
-        this.element.style.webkitTextSecurity = 'none';
-      }
-      this.element.value = this.value;
-    } else {
-      if (this.isMasked) {
-        const maskChar = MASK_TYPES[this.options.maskType] || MASK_TYPES.dot;
-        if (this.options.maskType === 'hidden') {
-          this.element.value = '';
+      let displayHtml = '';
+      for (let i = 0; i < value.length; i++) {
+        const char = value[i];
+        const charTime = this.charTimes[i] || 0;
+        const isSelected = i >= selectionStart && i < selectionEnd;
+        const isFresh = duration > 0 && (now - charTime < duration);
+        
+        if (isSelected || isFresh || charTime === 0) {
+          displayHtml += this.escapeHtml(char);
+        } else if (this.options.maskType === 'hidden') {
+          displayHtml += '<span style="opacity:0">■</span>';
         } else {
-          this.element.value = maskChar.repeat(this.value.length);
+          displayHtml += maskChar;
         }
-      } else {
-        this.element.value = this.value;
       }
+      
+      this.overlay.innerHTML = displayHtml + '<br>';
+    } else {
+      let result = '';
+      for (let i = 0; i < value.length; i++) {
+        const char = value[i];
+        const charTime = this.charTimes[i] || 0;
+        const isSelected = i >= selectionStart && i < selectionEnd;
+        const isFresh = duration > 0 && (now - charTime < duration);
+        
+        if (isSelected || isFresh || charTime === 0) {
+          result += char;
+        } else if (this.options.maskType === 'hidden') {
+          result += '';
+        } else {
+          result += maskChar;
+        }
+      }
+      this.element.value = result;
     }
   }
 
-  getValue() {
-    return this.value;
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   setValue(value) {
-    this.value = value;
-    this.resetTimer();
-    this.updateDisplay();
+    this.element.value = value;
+    this.charTimes = [];
+    const now = Date.now();
+    for (let i = 0; i < value.length; i++) {
+      this.charTimes.push(now);
+    }
+    this.startTimer();
+    this.renderDisplay();
   }
 
   reset() {
-    this.resetTimer();
+    this.charTimes = this.charTimes.map(() => 0);
+    this.startTimer();
+    this.renderDisplay();
   }
 
   destroy() {
     this.clearTimer();
     this.element.removeEventListener('input', this.handleInput);
+    this.element.removeEventListener('keydown', this.handleKeyDown);
+    this.element.removeEventListener('click', this.handleSelection);
+    this.element.removeEventListener('keyup', this.handleSelection);
     this.element.removeEventListener('copy', this.handleCopy);
     this.element.removeEventListener('cut', this.handleCut);
     this.element.removeEventListener('paste', this.handlePaste);
     this.element.removeEventListener('contextmenu', this.handleContextMenu);
     
-    if (this.isTextarea) {
-      this.element.readOnly = this.originalReadOnly;
-      this.element.style.webkitTextSecurity = 'none';
+    if (this.isTextarea && this.wrapper) {
+      this.element.style.position = '';
+      this.element.style.zIndex = '';
+      this.element.style.background = '';
+      this.element.style.color = '';
+      this.element.style.caretColor = '';
+      this.wrapper.parentNode.insertBefore(this.element, this.wrapper);
+      this.wrapper.remove();
       this.element.classList.remove('just-type-input', 'just-type-textarea');
     } else {
-      this.element.type = this.originalType;
-      this.element.readOnly = this.originalReadOnly;
-      this.element.autocomplete = this.originalAutocomplete;
+      this.element.type = 'text';
       this.element.classList.remove('just-type-input');
     }
     
-    this.element.value = this.value;
+    this.element.value = this.getValue();
   }
 }
 
