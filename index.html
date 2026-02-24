@@ -262,8 +262,9 @@
   <div class="info-toast" id="toast"></div>
   <div class="copy-indicator" id="copyIndicator">Copied!</div>
 
-  <script type="module">
-    import JustType from './src/JustType.js';
+  <script src="./just-type.umd.js"></script>
+  <script>
+    const { JustType } = window;
 
     const editor = document.getElementById('editor');
     const maskTypeSelect = document.getElementById('maskType');
