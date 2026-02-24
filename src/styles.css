@@ -1,0 +1,9 @@
+.just-type-input {
+  font-family: monospace;
+  letter-spacing: 0.1em;
+}
+
+.just-type-input::selection {
+  background-color: #007bff;
+  color: white;
+}

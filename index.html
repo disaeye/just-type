@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JustType - Secure Input Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 32px;
+      font-size: 14px;
+    }
+
+    .demo-section {
+      margin-bottom: 32px;
+    }
+
+    .demo-title {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .input-wrapper {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 18px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #667eea;
+    }
+
+    .info {
+      margin-top: 12px;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .info code {
+      background: #e0e0e0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Consolas', monospace;
+    }
+
+    .current-value {
+      margin-top: 24px;
+      padding: 16px;
+      background: #f0f7ff;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .current-value label {
+      margin-bottom: 4px;
+      color: #333;
+    }
+
+    .current-value span {
+      font-family: monospace;
+      font-size: 16px;
+      word-break: break-all;
+    }
+
+    .copy-test {
+      margin-top: 24px;
+      padding: 16px;
+      background: #fff5f5;
+      border-radius: 8px;
+      border-left: 4px solid #f56565;
+    }
+
+    .copy-test label {
+      margin-bottom: 8px;
+    }
+
+    .copy-test input {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JustType</h1>
+    <p class="subtitle">Secure input that masks characters after configurable duration</p>
+
+    <div class="demo-section">
+      <div class="demo-title">Demo - Try typing below</div>
+      
+      <div class="input-wrapper">
+        <label>Default (dot ●, 3s)</label>
+        <input type="password" id="input1" placeholder="Type something...">
+      </div>
+
+      <div class="input-wrapper">
+        <label>Square (□)</label>
+        <input type="password" id="input2" placeholder="Type something...">
+      </div>
+
+      <div class="input-wrapper">
+        <label>Block (■)</label>
+        <input type="password" id="input3" placeholder="Type something...">
+      </div>
+
+      <div class="input-wrapper">
+        <label>Triangle (▲)</label>
+        <input type="password" id="input4" placeholder="Type something...">
+      </div>
+
+      <div class="input-wrapper">
+        <label>Hidden (invisible)</label>
+        <input type="password" id="input5" placeholder="Type something...">
+      </div>
+
+      <div class="info">
+        Characters are visible for <code>3 seconds</code> after typing, then masked.<br>
+        Try <code>copy/paste</code> - the original value will be preserved.
+      </div>
+    </div>
+
+    <div class="current-value">
+      <label>Current Value (getValue()):</label>
+      <span id="valueDisplay">-</span>
+    </div>
+
+    <div class="copy-test">
+      <label>Paste Test (paste here to verify original value):</label>
+      <input type="text" id="pasteTest" placeholder="Paste and check...">
+    </div>
+  </div>
+
+  <script type="module">
+    import JustType from './src/JustType.js';
+
+    const inputs = [
+      new JustType('#input1', { 
+        maskType: 'dot', 
+        duration: 3000,
+        onInput: (val) => updateValue(val),
+        onExpire: () => console.log('Expired!')
+      }),
+      new JustType('#input2', { maskType: 'square', duration: 3000 }),
+      new JustType('#input3', { maskType: 'block', duration: 3000 }),
+      new JustType('#input4', { maskType: 'triangle', duration: 3000 }),
+      new JustType('#input5', { maskType: 'hidden', duration: 3000 })
+    ];
+
+    const valueDisplay = document.getElementById('valueDisplay');
+    const pasteTest = document.getElementById('pasteTest');
+
+    function updateValue(val) {
+      valueDisplay.textContent = val || '-';
+    }
+
+    pasteTest.addEventListener('input', (e) => {
+      console.log('Pasted value:', e.target.value);
+    });
+  </script>
+</body>
+</html>
