@@ -33,6 +33,6 @@ export default defineConfig({
     cssCodeSplit: false
   },
   css: {
-    filename: 'style.css'
+    filename: 'just-type.css'
   }
 });
