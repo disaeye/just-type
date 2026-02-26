@@ -165,9 +165,9 @@ class JustType {
       const isSelected = i >= start && i < end;
       
       if (isMasked && isSelected) {
-        span.className = 'jt-char jt-selected-reveal';
+        span.className = 'jt-char selected-reveal';
       } else if (isMasked) {
-        span.className = `jt-char jt-masked jt-mode-${this.options.maskType}`;
+        span.className = `jt-char masked ${this.getModeClass()}`;
         span.dataset.glyph = this.getGlyph(c.ch);
       } else {
         span.className = 'jt-char';
@@ -267,7 +267,7 @@ class JustType {
 
       if (c.masked) {
         const glyph = this.getGlyph(c.ch);
-        html += `<span class="jt-char jt-masked${this.getModeClass()}" data-i="${i}" data-glyph="${glyph}">${escaped}</span>`;
+        html += `<span class="jt-char masked${this.getModeClass()}" data-i="${i}" data-glyph="${glyph}">${escaped}</span>`;
       } else {
         html += `<span class="jt-char" data-i="${i}">${escaped}</span>`;
       }
